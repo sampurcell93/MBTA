@@ -14,7 +14,7 @@ var usermap = {
 		this.markers = markers;
         var mapOptions = {
           center: new google.maps.LatLng(42.330497742, -71.095794678),
-          zoom: 1,
+          zoom: 11,
           mapTypeId: google.maps.MapTypeId.ROADMAP
         };
         var map = new google.maps.Map(document.getElementById("map_canvas"),
@@ -97,10 +97,9 @@ var usermap = {
 			google.maps.event.addListener(markers[m], 'click', function() {
 				stopName = this.title;
 				var stationData = that.getJSON("http://mbtamap-cedar.herokuapp.com/mapper/station_schedule_all.json?stop_name=" + stopName);
-				console.log(stationData);
-				mvcObj = this;
-				infowindow.setContent(stationData + "!!!");	
-				infowindow.open(map, mvcObj);
+				stationData = that.formatSchedule(stationData);
+				infowindow.setContent("<h3>" + stopName + "</h3>" + stationData);	
+				infowindow.open(map, this);
 			});
 		}
 		redLine = new google.maps.Polyline({
@@ -124,6 +123,22 @@ var usermap = {
 			strokeWeight: 5
 		});
 		redLineBraintree.setMap(map);
+	},
+	formatSchedule: function(schedule) { 
+		schedule = JSON.parse(schedule);
+		var table = "<table border='1'><tr class='bold'><td>Trip # </td><td>Time remaining</td><td>Direction</td></tr>";
+		var train;
+
+		for (var i = 0; i < schedule.length; i++){
+			train = schedule[i];
+			table += "<tr>";
+			table += "<td>" + train.trip + "</td>";
+			table += "<td>" + train.time_remaining + "</td>";
+			table += "<td>" + train.direction + "</td>";
+			table += "</tr>";
+
+		}
+		return table + "</table>";
 	},
 	getJSON: function(url) {
 		console.log("!!");
@@ -150,7 +165,6 @@ var usermap = {
 	    httpRequest.send();
 	    return httpRequest.responseText;
 
-
 	  function alertContents() {
 	    if (httpRequest.readyState === 4) {
 	      if (httpRequest.status === 200) {
@@ -162,50 +176,70 @@ var usermap = {
 	  }
 	},
 	placeDesirables: function() {
-		var carmenAndWaldo = this.getJSON("http://messagehub.herokuapp.com/a3.json")
+		var desirables =  JSON.parse(this.getJSON("http://messagehub.herokuapp.com/a3.json"));
 		var map = this.map;
-		carmenAndWaldo = JSON.parse(carmenAndWaldo);
-		console.log(carmenAndWaldo);
 		var carmen = "carmen.png";
 		var waldo = "waldo.png";
 		var mark;
 
-		for (var i = 0; i < carmenAndWaldo.length; i++){
-			console.log(carmenAndWaldo[i]);
+		for (var i = 0; i < desirables.length; i++){
+			console.log(desirables[i]);
+			var note = desirables[i].loc.note;
 			mark = new google.maps.Marker({
-				position: new google.maps.LatLng(carmenAndWaldo[i].loc.latitude, carmenAndWaldo[i].loc.latitude),
-				title: carmenAndWaldo[i].name,
+				position: new google.maps.LatLng(desirables[i].loc.latitude, desirables[i].loc.longitude),
+				title: desirables[i].name
 			});
-			if (carmenAndWaldo[i].name == "Carmen Sandiego"){
+			if (desirables[i].name == "Carmen Sandiego"){
 				mark.setIcon(carmen);
 			}
 			else {
 				mark.setIcon(waldo);
 			}
+			var d = this.getDistance(this.userLat, this.userLon, desirables[i].loc.latitude, desirables[i].loc.longitude);
 			mark.setMap(map);
+			var that = this;
+			google.maps.event.addListener(mark, 'click', function() {
+				var infowindow = new google.maps.InfoWindow();
+				infowindow.setContent(note);	
+				infowindow.open(that.map, this);
+			});
 		}
-
 	},
 	getDistance: function(lat1, lon1, lat2, lon2) {
-
-		var R = 6371; // km
-		var dLat = (lat2-lat1).toRad();
-		var dLon = (lon2-lon1).toRad();
+		console.log(lat1, lon1, "user");
+		console.log(lat2, lon2, "desirable");
+		Number.prototype.toRad = function() {
+		   return this * Math.PI / 180;
+		}
+		var R = 6371; // km 
+		var dLat = (lat2 - lat1).toRad();
+		var dLon = (lon2 - lon1).toRad();
 		var lat1 = lat1.toRad();
 		var lat2 = lat2.toRad();
+
 		var a = Math.sin(dLat/2) * Math.sin(dLat/2) +
 		        Math.sin(dLon/2) * Math.sin(dLon/2) * Math.cos(lat1) * Math.cos(lat2); 
 		var c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)); 
-		return R * c;
+		var d = R * c;
+		return d;
 	},
 	getUserLocation: function() {
 		var that = this;
 		if (navigator.geolocation) {
 			navigator.geolocation.getCurrentPosition(function(position) {
+				console.log(position);
 				that.userLat = position.coords.latitude;
 				that.userLon = position.coords.longitude;
-				this.placeDesirables();
-
+				that.placeDesirables();
+				userLoc = new google.maps.LatLng(that.userLat, that.userLon);
+				userMark = new google.maps.Marker({position: userLoc, title: "you're here!"});
+				userMark.setMap(that.map);
+				that.map.setCenter(userLoc, 12);
+				google.maps.event.addListener(userMark, 'click', function() {
+					var infowindow = new google.maps.InfoWindow();
+					infowindow.setContent("You are at " + that.userLat + " lat, " + that.userLon, " long.");	
+					infowindow.open(that.map, this);
+				});
 			});
 		}
 	}
