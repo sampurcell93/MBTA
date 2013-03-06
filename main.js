@@ -14,7 +14,7 @@ var usermap = {
 		this.markers = markers;
         var mapOptions = {
           center: new google.maps.LatLng(42.330497742, -71.095794678),
-          zoom: 11,
+          zoom: 13,
           mapTypeId: google.maps.MapTypeId.ROADMAP
         };
         var map = new google.maps.Map(document.getElementById("map_canvas"),
@@ -89,7 +89,7 @@ var usermap = {
 		pt = new google.maps.LatLng(42.2078543, -71.0011385);
 		markers.push(new google.maps.Marker({position: pt, title: "Braintree Station", icon: tico}));
 			redBranchBraintree.push(pt);
-
+		console.log(pt);
 		// Render markers to map
 		for (var m in markers) {
 			var that = this;
@@ -123,6 +123,9 @@ var usermap = {
 			strokeWeight: 5
 		});
 		redLineBraintree.setMap(map);
+		this.braintree = redBranchBraintree;
+		this.redStations = redStations;
+		this.redBranchAshmont = redBranchAshmont;
 	},
 	formatSchedule: function(schedule) { 
 		schedule = JSON.parse(schedule);
@@ -180,22 +183,27 @@ var usermap = {
 		var map = this.map;
 		var carmen = "carmen.png";
 		var waldo = "waldo.png";
-		var mark;
+		var mark, d, icon;
 
 		for (var i = 0; i < desirables.length; i++){
-			console.log(desirables[i]);
+			if (desirables[i].name == "Carmen Sandiego"){
+				icon = carmen;
+			}
+			else { icon = waldo; }
 			var note = desirables[i].loc.note;
 			mark = new google.maps.Marker({
 				position: new google.maps.LatLng(desirables[i].loc.latitude, desirables[i].loc.longitude),
-				title: desirables[i].name
+				title: desirables[i].name,
+				icon: icon
 			});
-			if (desirables[i].name == "Carmen Sandiego"){
-				mark.setIcon(carmen);
-			}
-			else {
-				mark.setIcon(waldo);
-			}
+	
 			var d = this.getDistance(this.userLat, this.userLon, desirables[i].loc.latitude, desirables[i].loc.longitude);
+			var box = document.createElement("aside");
+			box.innerHTML = desirables[i].name + " is " + d + " miles away ";
+			box.style.left = i * 300 + "px";
+			box.style.background = "url(" + icon + ") left bottom no-repeat rgba(255,255,255,.85)";
+			var c = document.getElementById("map_canvas");
+			c.appendChild(box);
 			mark.setMap(map);
 			var that = this;
 			google.maps.event.addListener(mark, 'click', function() {
@@ -203,15 +211,14 @@ var usermap = {
 				infowindow.setContent(note);	
 				infowindow.open(that.map, this);
 			});
+
 		}
 	},
 	getDistance: function(lat1, lon1, lat2, lon2) {
-		console.log(lat1, lon1, "user");
-		console.log(lat2, lon2, "desirable");
 		Number.prototype.toRad = function() {
 		   return this * Math.PI / 180;
 		}
-		var R = 6371; // km 
+		var R = 3961; // mi
 		var dLat = (lat2 - lat1).toRad();
 		var dLon = (lon2 - lon1).toRad();
 		var lat1 = lat1.toRad();
@@ -220,8 +227,8 @@ var usermap = {
 		var a = Math.sin(dLat/2) * Math.sin(dLat/2) +
 		        Math.sin(dLon/2) * Math.sin(dLon/2) * Math.cos(lat1) * Math.cos(lat2); 
 		var c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)); 
-		var d = R * c;
-		return d;
+		return R * c;
+
 	},
 	getUserLocation: function() {
 		var that = this;
@@ -235,12 +242,56 @@ var usermap = {
 				userMark = new google.maps.Marker({position: userLoc, title: "you're here!"});
 				userMark.setMap(that.map);
 				that.map.setCenter(userLoc, 12);
+				var closest = that.findClosest();
+				var cpt = new google.maps.LatLng(closest.lat,closest.lon);
 				google.maps.event.addListener(userMark, 'click', function() {
 					var infowindow = new google.maps.InfoWindow();
-					infowindow.setContent("You are at " + that.userLat + " lat, " + that.userLon, " long.");	
+					infowindow.setContent("The closest station is " + closest.min + " miles away, as the raven flies");	
 					infowindow.open(that.map, this);
 				});
+				var closestLine = new google.maps.Polyline({
+					path: [userLoc, cpt ],
+					strokeColor: "#000000",
+					strokeOpacity: 0.5,
+					strokeWeight: 7
+				});
+				closestLine.setMap(that.map);
 			});
 		}
+	},
+	findClosest: function() {
+		var min, d, pt, clat;
+		var lat = this.userLat;
+		var lon = this.userLon;
+		for (var i = 0; i < this.braintree.length; i++) {
+			d = this.getDistance(lat,lon,this.braintree[i].ib, this.braintree[i].jb);
+			if (i == 0) min = d;
+			if (d < min){
+				min = d;
+				pt = this.braintree[i];
+				clat = this.braintree[i].ib;
+				clong = this.braintree[i].jb;
+			}
+		}
+		for (var i = 0; i < this.redStations.length; i++) {
+			d = this.getDistance(lat,lon,this.redStations[i].ib, this.redStations[i].jb);
+			if (d < min){
+				min = d;
+				this.redStations[i];
+				clat = this.redStations[i].ib;
+				clong = this.redStations[i].jb;
+
+			}
+		}
+		for (var i = 0; i < this.redBranchAshmont.length; i++) {
+			d = this.getDistance(lat,lon,this.redBranchAshmont[i].ib, this.redBranchAshmont[i].jb);
+			if (d < min){
+				min = d;
+				pt = this.redBranchAshmont[i];
+				clat = this.redBranchAshmont[i].ib;
+				clong = this.redBranchAshmont[i].jb;
+			}
+		}
+		return { min: min, lat: clat, lon: clong };
 	}
 };
